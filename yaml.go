@@ -33,6 +33,15 @@ type Unmarshaler interface {
 	UnmarshalYAML(unmarshal func(interface{}) error) error
 }
 
+type TagUnmarshallerDecoder struct {
+	d *decoder
+}
+
+// The Tag Unmarshaler interface
+type TagUnmarshaler interface {
+	UnmarshalYAMLTag(tag string, out reflect.Value) reflect.Value
+}
+
 // The Marshaler interface may be implemented by types to customize their
 // behavior when being marshaled into a YAML document. The returned value
 // is marshaled in place of the original value implementing Marshaler.
@@ -41,6 +50,14 @@ type Unmarshaler interface {
 // and returns with the provided error.
 type Marshaler interface {
 	MarshalYAML() (interface{}, error)
+}
+
+func RegisterTagUnmarshaler(tag string, unmarshaler TagUnmarshaler) {
+	registerCustomTagUnmarshaler(tag, unmarshaler)
+}
+
+func UnRegisterTagUnmarshaler(tag string) {
+	unregisterCustomTagUnmarshaler(tag)
 }
 
 // Unmarshal decodes the first document found within the in byte slice

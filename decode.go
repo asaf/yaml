@@ -200,6 +200,7 @@ func (p *parser) scalar() *node {
 
 func (p *parser) sequence() *node {
 	n := p.node(sequenceNode)
+	n.tag = string(p.event.tag)
 	p.anchor(n, p.event.anchor)
 	p.expect(yaml_SEQUENCE_START_EVENT)
 	for p.peek() != yaml_SEQUENCE_END_EVENT {
@@ -211,6 +212,7 @@ func (p *parser) sequence() *node {
 
 func (p *parser) mapping() *node {
 	n := p.node(mappingNode)
+	n.tag = string(p.event.tag)
 	p.anchor(n, p.event.anchor)
 	p.expect(yaml_MAPPING_START_EVENT)
 	for p.peek() != yaml_MAPPING_END_EVENT {
@@ -238,12 +240,23 @@ var (
 	ifaceType      = defaultMapType.Elem()
 	timeType       = reflect.TypeOf(time.Time{})
 	ptrTimeType    = reflect.TypeOf(&time.Time{})
+	tagUnmarshalers = map[string]TagUnmarshaler{}
 )
 
 func newDecoder(strict bool) *decoder {
 	d := &decoder{mapType: defaultMapType, strict: strict}
 	d.aliases = make(map[*node]bool)
 	return d
+}
+
+func registerCustomTagUnmarshaler(tag string, unmarshaler TagUnmarshaler) {
+	tagUnmarshalers[tag] = unmarshaler
+}
+
+func unregisterCustomTagUnmarshaler(tag string) {
+	if _, ok := tagUnmarshalers[tag]; ok {
+		delete(tagUnmarshalers, tag)
+	}
 }
 
 func (d *decoder) terror(n *node, tag string, out reflect.Value) {
@@ -335,6 +348,17 @@ func (d *decoder) unmarshal(n *node, out reflect.Value) (good bool) {
 	default:
 		panic("internal error: unknown node kind: " + strconv.Itoa(n.kind))
 	}
+
+	// If the node has a tag, and a custom tag unmarshaler is registered,
+	// then call it to unmarshal rest of the tree
+	if good && len(n.tag) > 0 {
+		if unmarshaller, found := tagUnmarshalers[n.tag]; found {
+			tagSuffix := n.tag[1:]  // Remove starting ! from tag
+			newOutput := unmarshaller.UnmarshalYAMLTag(tagSuffix, out)
+			out.Set(newOutput)
+		}
+	}
+
 	return good
 }
 
